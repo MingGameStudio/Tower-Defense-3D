@@ -51,6 +51,19 @@ namespace StarterAssets
 		[Tooltip("How far in degrees can you move the camera down")]
 		public float BottomClamp = -90.0f;
 
+		[Header("Shooting")]
+		[Tooltip("Sound to play when left mouse button is clicked")]
+		public AudioClip ShootingSound;
+		[Tooltip("Volume used for the shooting sound")]
+		[Range(0f, 1f)]
+		public float ShootingVolume = 1.0f;
+		[Tooltip("Particle prefab to spawn when shooting")]
+		public GameObject ShootingVfxPrefab;
+		[Tooltip("Position/rotation where the shooting VFX should spawn")]
+		public Transform ShootingVfxSpawnPoint;
+		[Tooltip("Particle prefab to spawn when a shot hits a target")]
+		public GameObject ImpactVfxPrefab;
+
 		// cinemachine
 		private float _cinemachineTargetPitch;
 
@@ -115,6 +128,7 @@ namespace StarterAssets
 			JumpAndGravity();
 			GroundedCheck();
 			Move();
+			HandleShoot();
 		}
 
 		private void LateUpdate()
@@ -251,6 +265,66 @@ namespace StarterAssets
 			if (lfAngle < -360f) lfAngle += 360f;
 			if (lfAngle > 360f) lfAngle -= 360f;
 			return Mathf.Clamp(lfAngle, lfMin, lfMax);
+		}
+
+		private void HandleShoot()
+		{
+			bool shootPressedThisFrame;
+#if ENABLE_INPUT_SYSTEM
+			shootPressedThisFrame = Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
+#else
+			shootPressedThisFrame = Input.GetMouseButtonDown(0);
+#endif
+
+			if (!shootPressedThisFrame)
+			{
+				return;
+			}
+
+			TryDestroyTargetFromCameraCenter();
+			PlayShootVfx();
+
+			if (ShootingSound != null)
+			{
+				AudioSource.PlayClipAtPoint(ShootingSound, transform.position, ShootingVolume);
+			}
+		}
+
+		private void PlayShootVfx()
+		{
+			if (ShootingVfxPrefab == null)
+			{
+				return;
+			}
+
+			Vector3 spawnPosition = ShootingVfxSpawnPoint != null ? ShootingVfxSpawnPoint.position : transform.position;
+			Quaternion spawnRotation = ShootingVfxSpawnPoint != null ? ShootingVfxSpawnPoint.rotation : transform.rotation;
+			Instantiate(ShootingVfxPrefab, spawnPosition, spawnRotation);
+		}
+
+		private void TryDestroyTargetFromCameraCenter()
+		{
+			if (_mainCamera == null)
+			{
+				return;
+			}
+
+			Camera cameraComponent = _mainCamera.GetComponent<Camera>();
+			if (cameraComponent == null)
+			{
+				return;
+			}
+
+			Ray ray = cameraComponent.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+			if (Physics.Raycast(ray, out RaycastHit hitInfo) && hitInfo.collider.CompareTag("Target"))
+			{
+				if (ImpactVfxPrefab != null)
+				{
+					Instantiate(ImpactVfxPrefab, hitInfo.point, Quaternion.LookRotation(hitInfo.normal));
+				}
+
+				Destroy(hitInfo.collider.gameObject);
+			}
 		}
 
 		private void OnDrawGizmosSelected()
